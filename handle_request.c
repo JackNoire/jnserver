@@ -12,18 +12,15 @@
 #include <sys/stat.h>
 #include <sys/sendfile.h>
 
+#include "writen.h"
+#include "cgi.h"
+#include "handle_request.h"
+
 #define MAXLINE 1024 //一行的最大长度
 
 static char httpline[MAXLINE];
 
-enum {
-    ERROR_MSG_404 = 0,
-    ERROR_MSG_414,
-    ERROR_MSG_500,
-    ERROR_MSG_400,
-    ERROR_MSG_TOTAL
-};
-static char *error_msg[ERROR_MSG_TOTAL] = {
+char *error_msg[ERROR_MSG_TOTAL] = {
     "HTTP/1.1 404 Not Found\r\n"
     "Content-length: 95\r\n\r\n"
     "<h1>404 Not Found</h1>"
@@ -48,6 +45,7 @@ static char *error_msg[ERROR_MSG_TOTAL] = {
     "<p>Syntax error.</p>"
     "<hr><i>jnserver</i>"
 };
+
 #define SEND_ERROR_MSG(code) printf("[Reply] %s:%d error code " #code "\n", \
         inet_ntoa(client_addr.sin_addr), ntohs(client_addr.sin_port)); \
         writen(sc, error_msg[ERROR_MSG_##code], strlen(error_msg[ERROR_MSG_##code]));
@@ -91,26 +89,7 @@ static const char* get_mime_type(char *filename){
     return default_mime_type;
 }
 
-ssize_t writen(int fd, void *usrbuf, size_t n){
-    size_t nleft = n;
-    ssize_t nwritten;
-    char *bufp = usrbuf;
 
-    while (nleft > 0){
-        if ((nwritten = write(fd, bufp, nleft)) <= 0){
-            if (errno == EINTR)  /* interrupted by sig handler return */
-                nwritten = 0;    /* and call write() again */
-            else
-                return -1;       /* errorno set by write() */
-        }
-        nleft -= nwritten;
-        bufp += nwritten;
-        if (nleft > 0) {
-            usleep(50000);
-        }
-    }
-    return n;
-}
 
 /*
  * 读取http请求中的一行，保存到httpline中
@@ -172,7 +151,14 @@ static int url_decode(char *str, int maxlen) {
 /*
  * 向客户端发送文件内容
  */
-static void send_file_to_client(int sc, int fd, char *filepath, off_t filesize) {
+static void send_file_to_client(int sc, int fd, char *filepath, off_t filesize, char *param) {
+    //先检查是否为php文件
+    char *dot = strrchr(filepath, '.');
+    if (dot && !strcmp(dot, ".php")) {
+        send_php_to_client(sc, filepath, param);
+        return;
+    }
+    //不是php文件，继续后续处理
     char buf[1024];
     sprintf(buf,
             "HTTP/1.1 200 OK\r\n"
@@ -213,7 +199,7 @@ static void send_dir_to_client(int sc, int fd, char *filepath, char *uri, struct
     if (tmpfd > 0) { //尝试在文件夹中搜索index.html，如果存在则向客户端发送index.html
         fstat(tmpfd, &sbuf); //获取文件类型
         if (S_ISREG(sbuf.st_mode)) { //普通文件
-            send_file_to_client(sc, tmpfd, indexpath, sbuf.st_size);
+            send_file_to_client(sc, tmpfd, indexpath, sbuf.st_size, NULL); //肯定不是php文件，可传入NULL
             close(tmpfd);
             free(indexpath);
             return;
@@ -334,7 +320,7 @@ void handle_request(int sc, struct sockaddr_in client_addr, char *rootdir) {
             struct stat sbuf;
             fstat(fd, &sbuf); //获取文件类型
             if (S_ISREG(sbuf.st_mode)) { //普通文件
-                send_file_to_client(sc, fd, filepath, sbuf.st_size);
+                send_file_to_client(sc, fd, filepath, sbuf.st_size, param);
             } else if (S_ISDIR(sbuf.st_mode)) { //目录文件
                 send_dir_to_client(sc, fd, filepath, uri, client_addr);
             } else {

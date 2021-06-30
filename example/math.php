@@ -5,20 +5,23 @@
 </form>
 
 <?php
-$num = (integer)$_GET['num'];
-if ($num >= 2 && $num < 500000) {
-    echo $num;
-    echo " = ";
-    for ($i = 2; $i < (integer)$_GET['num'] && $num !== 1; $i++) {
-        while ($num % $i === 0) {
-            echo $i;
-            if ($num !== $i) {
-                echo " × ";
+if (isset($_GET['num'])) {
+    $num = (integer)$_GET['num'];
+    if ($num >= 2 && $num < 500000) {
+        echo $num;
+        echo " = ";
+        for ($i = 2; $i < (integer)$_GET['num'] && $num !== 1; $i++) {
+            while ($num % $i === 0) {
+                echo $i;
+                if ($num !== $i) {
+                    echo " × ";
+                }
+                $num /= $i;
             }
-            $num /= $i;
         }
     }
 }
+
 echo "<br>";
 var_dump($_GET);
 ?>

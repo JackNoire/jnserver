@@ -1,0 +1,26 @@
+#include <unistd.h>
+#include <errno.h>
+
+/*
+ * 向客户端写n字节数据
+ */
+ssize_t writen(int fd, void *usrbuf, size_t n){
+    size_t nleft = n;
+    ssize_t nwritten;
+    char *bufp = usrbuf;
+
+    while (nleft > 0){
+        if ((nwritten = write(fd, bufp, nleft)) <= 0){
+            if (errno == EINTR)  /* interrupted by sig handler return */
+                nwritten = 0;    /* and call write() again */
+            else
+                return -1;       /* errorno set by write() */
+        }
+        nleft -= nwritten;
+        bufp += nwritten;
+        if (nleft > 0) {
+            usleep(50000);
+        }
+    }
+    return n;
+}
