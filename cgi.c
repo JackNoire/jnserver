@@ -38,6 +38,11 @@ void send_php_to_client(int sc, char *filepath, char *param) {
         }
         //char *argv[5] = {"/usr/bin/php-cgi", "-f", filepath, "num=12", NULL};
         char **argv = (char **)malloc(sizeof(char *) * (paramCount + 4));
+        if (NULL == argv) {
+            printf("malloc error.\n");
+            writen(sc, error_msg[ERROR_MSG_500], strlen(error_msg[ERROR_MSG_500]));
+            _exit(0);
+        }
         argv[0] = "/usr/bin/php-cgi";
         argv[1] = "-f";
         argv[2] = filepath;
