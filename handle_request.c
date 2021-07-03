@@ -16,10 +16,6 @@
 #include "cgi.h"
 #include "handle_request.h"
 
-#define MAXLINE 1024 //一行的最大长度
-
-static char httpline[MAXLINE];
-
 char *error_msg[ERROR_MSG_TOTAL] = {
     "HTTP/1.1 404 Not Found\r\n"
     "Content-length: 95\r\n\r\n"
@@ -91,31 +87,21 @@ static const char* get_mime_type(char *filename){
 
 
 
+#define MAXSIZE 0x1000
+static char httpcontent[MAXSIZE];    //HTTP报文内容
 /*
- * 读取http请求中的一行，保存到httpline中
+ * 读取http请求内容，保存到httpcontent中
  * 返回读取的字符数，返回-1表示read发生错误，-2表示字符数超出上限
  */
-static ssize_t read_httpline(int sc) {
-    for (int n = 0; n < MAXLINE - 1; n++) {
-        ssize_t readCount = read(sc, &httpline[n], 1);
-        if (readCount == 1) { //正常情况，读取一个字符
-            if (httpline[n] == '\n' || httpline[n] == '\r') {
-                if (n == 0) { //一开始就读取'\n'或'\r'
-                    n--;
-                    continue;
-                } else { //一行已读取完毕
-                    httpline[n] = '\0';
-                    return n;
-                }
-            }
-        } else if (readCount == 0) { //读到EOF
-            httpline[n] = '\0';
-            return n;
-        } else { //read发生错误
-            return -1;
-        }
+static ssize_t read_httpcontent(int sc) {
+    ssize_t readCount = read(sc, httpcontent, sizeof(httpcontent) - 1);
+    if (readCount == sizeof(httpcontent) - 1) {
+        return -2; //字符数超出上限
+    } else if (readCount < 0) {
+        return -1; //读取失败
     }
-    return -2; //字符数超出上限
+    httpcontent[readCount] = '\0';
+    return readCount;
 }
 
 /*
@@ -159,7 +145,7 @@ static void send_file_to_client(int sc, int fd, char *filepath, off_t filesize, 
         return;
     }
     //不是php文件，继续后续处理
-    char buf[1024];
+    char buf[MAXSIZE * 2];
     sprintf(buf,
             "HTTP/1.1 200 OK\r\n"
             "Content-length: %ld\r\n"
@@ -172,7 +158,6 @@ static void send_file_to_client(int sc, int fd, char *filepath, off_t filesize, 
     }
     off_t offset = 0;
     while (offset < filesize) {
-        usleep(50000); //如果不延时会导致连接重置
         if (sendfile(sc, fd, &offset, filesize - offset) <= 0) {
             printf("sendfile error.\n");
             break;
@@ -208,7 +193,7 @@ static void send_dir_to_client(int sc, int fd, char *filepath, char *uri, struct
     }
     free(indexpath);
     //没有index.html，生成Index of页面
-    char htmlbuf[2048];
+    char htmlbuf[MAXSIZE * 4];
     sprintf(htmlbuf, "<h1>Index of %s</h1>", uri);
     DIR *dp = opendir(filepath);
     if (NULL == dp) {
@@ -245,7 +230,7 @@ static void send_dir_to_client(int sc, int fd, char *filepath, char *uri, struct
                 "<a href=\"%s\">%s</a><br>", 
                 tmpuri, printfilename);
     }
-    char buf[8192];
+    char buf[MAXSIZE * 4];
     sprintf(buf, 
             "HTTP/1.1 200 OK\r\n"
             "Content-length: %ld\r\n"
@@ -253,6 +238,7 @@ static void send_dir_to_client(int sc, int fd, char *filepath, char *uri, struct
             strlen(htmlbuf));
     strcat(buf, htmlbuf);
     writen(sc, buf, strlen(buf));
+    closedir(dp);
 }
 
 
@@ -260,9 +246,8 @@ static void send_dir_to_client(int sc, int fd, char *filepath, char *uri, struct
  * 处理客户端http请求
  */
 void handle_request(int sc, struct sockaddr_in client_addr, char *rootdir) {
-    char method[MAXLINE], uri[MAXLINE];
 
-    ssize_t count = read_httpline(sc); //读取一行http请求
+    ssize_t count = read_httpcontent(sc); //读取http请求
     switch(count) {
     case 0: {
         printf("No data from HTTP request.\n");
@@ -281,7 +266,12 @@ void handle_request(int sc, struct sockaddr_in client_addr, char *rootdir) {
     }
     }
 
-    count = sscanf(httpline, "%s%s", method, uri); //获取method和uri
+    char method[MAXSIZE];   //HTTP请求报文类型，如GET、POST
+    char uri[MAXSIZE];      //跟在GET、POST后面的URI
+    printf("******************************\n");
+    printf("%s", httpcontent);
+    printf("******************************\n");
+    count = sscanf(httpcontent, "%s%s", method, uri); //获取method和uri
     if (count != 2 || uri[0] != '/') {
         printf("syntax error\n");
         SEND_ERROR_MSG(400);
@@ -296,7 +286,7 @@ void handle_request(int sc, struct sockaddr_in client_addr, char *rootdir) {
         }
     }
 
-    char *filepath = (char *)malloc(strlen(rootdir) + MAXLINE * 2);
+    char *filepath = (char *)malloc(strlen(rootdir) + MAXSIZE * 2);
     if (NULL == filepath) {
         printf("malloc error\n");
         SEND_ERROR_MSG(500);
@@ -304,7 +294,7 @@ void handle_request(int sc, struct sockaddr_in client_addr, char *rootdir) {
     }
     strcpy(filepath, rootdir);
     strcat(filepath, uri); //拼接根目录和URI得到文件路径
-    if (!url_decode(filepath, strlen(rootdir) + MAXLINE * 2)) { //URL解码
+    if (!url_decode(filepath, strlen(rootdir) + MAXSIZE * 2)) { //URL解码
         printf("url_decode error\n");
         SEND_ERROR_MSG(500);
         goto exit;

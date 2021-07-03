@@ -18,9 +18,6 @@ ssize_t writen(int fd, void *usrbuf, size_t n){
         }
         nleft -= nwritten;
         bufp += nwritten;
-        if (nleft > 0) {
-            usleep(50000);
-        }
     }
     return n;
 }

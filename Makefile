@@ -1,6 +1,6 @@
 HDRS = handle_request.h
 CC = gcc
-CFLAGS = -O2 -Wno-unused-result
+CFLAGS = -O2 -Wall
 OBJS = main.o handle_request.o cgi.o writen.o
 
 all: jnserver
