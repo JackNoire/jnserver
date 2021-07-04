@@ -29,3 +29,15 @@ whereis php-cgi
 ```shell
 ./jnserver [-r 根目录] [-p 端口号]
 ```
+
+# 参考资料
+
+[shenfeng/tiny-web-server](https://github.com/shenfeng/tiny-web-server)
+
+[Linux下getopt()函数的简单使用](https://www.cnblogs.com/qingergege/p/5914218.html)
+
+[HTTP 响应代码](https://developer.mozilla.org/zh-CN/docs/Web/HTTP/Status)
+
+[Reading directory content in linux](https://stackoverflow.com/questions/5734802/reading-directory-content-in-linux)
+
+[socket - close(2) send RST packet instead of FIN packet](https://stackoverflow.com/questions/54937761/socket-close2-send-rst-packet-instead-of-fin-packet)
